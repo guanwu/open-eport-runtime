@@ -1,0 +1,2609 @@
+<!doctype html>
+<!--
+  Copyright (C) 2026 Jiaowei <wei.jiao@guanwu.com>
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="A local test console for Open ePort Runtime.">
+  <title>Open ePort Runtime</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23e6e9e7'/%3E%3Ccircle cx='10' cy='16' r='4' fill='%231c4e80'/%3E%3Cpath d='M14 16h14' stroke='%23151d21' stroke-width='2'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: light;
+      --base: #e6e9e7;
+      --panel: #f1f2ef;
+      --panel-bright: #fbfbf7;
+      --ink: #151d21;
+      --muted: #536063;
+      --faint: #788486;
+      --line: #b3bcba;
+      --line-strong: #5c6a6d;
+      --blue: #1c4e80;
+      --blue-bright: #2a67a3;
+      --signal: #a8422a;
+      --console: #11191c;
+      --console-2: #172226;
+      --console-line: #2b3a3d;
+      --console-text: #d3ddd9;
+      --console-dim: #93a4a0;
+      --font-ui: "Bahnschrift", "DIN Alternate", "Avenir Next Condensed", "DejaVu Sans Condensed", "Segoe UI", sans-serif;
+      --font-mono: "Cascadia Mono", "Cascadia Code", "SF Mono", "Consolas", "DejaVu Sans Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      background-color: var(--base);
+      background-image:
+        linear-gradient(rgba(21, 29, 33, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(21, 29, 33, 0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: var(--ink);
+      font-family: var(--font-ui);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    ::selection {
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    button,
+    input,
+    textarea {
+      font-family: inherit;
+    }
+
+    .page {
+      max-width: 1460px;
+      margin: 0 auto;
+      padding: 0 32px 48px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 480px;
+      gap: 40px;
+      align-items: end;
+      padding: 32px 0 22px;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .brand {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      margin-top: 2px;
+      color: var(--ink);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(30px, 3.4vw, 42px);
+      line-height: 0.98;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+
+    .subtitle {
+      max-width: 56ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 14.5px;
+    }
+
+    .wire {
+      border: 1px solid var(--line);
+      background: rgba(241, 242, 239, 0.92);
+      padding: 12px 14px 10px;
+    }
+
+    .wire-labels {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 7px;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+
+    .wire-track-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .port {
+      width: 11px;
+      height: 11px;
+      flex: 0 0 auto;
+      border: 1.5px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--base);
+      transition: background-color 120ms ease, border-color 120ms ease;
+    }
+
+    .track {
+      position: relative;
+      flex: 1;
+      height: 2px;
+      margin: 0 8px;
+      background: repeating-linear-gradient(
+        90deg,
+        var(--line-strong) 0 6px,
+        transparent 6px 11px
+      );
+    }
+
+    .packet {
+      position: absolute;
+      top: -3px;
+      left: 0;
+      display: none;
+      width: 8px;
+      height: 8px;
+      background: var(--blue);
+    }
+
+    .wire-foot {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    .wire-state,
+    .wire-endpoint,
+    .wire-protocol {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .wire-state {
+      color: var(--muted);
+    }
+
+    .wire-endpoint {
+      margin-right: auto;
+      color: var(--faint);
+    }
+
+    .wire-protocol {
+      color: var(--muted);
+    }
+
+    .wire.is-connecting .port.source {
+      border-color: var(--blue);
+      animation: port-pulse 900ms ease-in-out infinite alternate;
+    }
+
+    .wire.is-connecting .track {
+      background: repeating-linear-gradient(
+        90deg,
+        var(--blue) 0 6px,
+        transparent 6px 11px
+      );
+    }
+
+    .wire.is-connected .port,
+    .wire.is-busy .port {
+      border-color: var(--blue);
+      background: var(--blue);
+    }
+
+    .wire.is-connected .track,
+    .wire.is-busy .track {
+      background: var(--blue);
+    }
+
+    .wire.is-connected .wire-state,
+    .wire.is-busy .wire-state {
+      color: var(--blue);
+    }
+
+    .wire.is-busy .packet {
+      display: block;
+      animation: packet-run 1.1s linear infinite;
+    }
+
+    .wire.is-error .port.target {
+      border-color: var(--signal);
+      background: var(--signal);
+    }
+
+    .wire.is-error .track {
+      background: repeating-linear-gradient(
+        90deg,
+        var(--signal) 0 6px,
+        transparent 6px 11px
+      );
+    }
+
+    .wire.is-error .wire-state {
+      color: var(--signal);
+    }
+
+    @keyframes packet-run {
+      from {
+        left: 0;
+      }
+      to {
+        left: calc(100% - 8px);
+      }
+    }
+
+    @keyframes port-pulse {
+      from {
+        background: var(--base);
+      }
+      to {
+        background: var(--blue);
+      }
+    }
+
+    button.secondary {
+      padding: 4px 10px;
+      border: 1px solid var(--ink);
+      background: transparent;
+      color: var(--ink);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background-color 80ms ease, color 80ms ease;
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: var(--ink);
+      color: var(--panel-bright);
+    }
+
+    button:focus-visible,
+    textarea:focus-visible,
+    input:focus-visible,
+    summary:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 3px;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      gap: 32px;
+      align-items: start;
+      padding-top: 26px;
+    }
+
+    .rail {
+      min-width: 0;
+    }
+
+    .connection {
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+    }
+
+    .section-head {
+      display: block;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(251, 251, 247, 0.6);
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .section-note {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+
+    .connection-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .endpoint-field {
+      min-width: 0;
+    }
+
+    .connection-action {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input[type="text"] {
+      display: block;
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--panel-bright);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+    }
+
+    input[type="text"]:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: -1px;
+    }
+
+    input[type="text"][readonly] {
+      color: var(--muted);
+    }
+
+    .connection-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--faint);
+    }
+
+    .status-dot.is-on {
+      background: var(--blue);
+    }
+
+    .status-dot.is-error {
+      background: var(--signal);
+    }
+
+    .ops {
+      margin-top: 26px;
+    }
+
+    .rail-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .rail-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .rail-head span {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .op-group {
+      margin-top: 18px;
+    }
+
+    .op-group h3 {
+      margin: 0 0 4px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+
+    .op {
+      position: relative;
+      display: block;
+      width: 100%;
+      padding: 8px 8px 7px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .op:hover:not(:disabled) {
+      background: rgba(28, 78, 128, 0.07);
+    }
+
+    .op[aria-pressed="true"] {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: var(--panel-bright);
+    }
+
+    .op:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .op-name {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      letter-spacing: -0.01em;
+    }
+
+    .op-desc {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11.5px;
+    }
+
+    .op[aria-pressed="true"] .op-desc {
+      color: #c8d9e7;
+    }
+
+    .rail-note {
+      margin-top: 22px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    .rail-note code {
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .bench {
+      min-width: 0;
+    }
+
+    .request-panel {
+      border: 1px solid var(--line-strong);
+      background: var(--panel);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(251, 251, 247, 0.6);
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .op-badge {
+      padding: 1px 6px;
+      border: 1px solid currentColor;
+      color: var(--blue);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .panel-body {
+      padding: 14px;
+    }
+
+    .field-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+
+    .field-head label,
+    .field-head .label {
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .field-note {
+      margin-left: auto;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-align: right;
+    }
+
+    .field-note.is-error {
+      color: var(--signal);
+    }
+
+    .link-button {
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--blue);
+      font-size: 11.5px;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+
+    .link-button:hover {
+      color: var(--ink);
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--panel-bright);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      resize: vertical;
+    }
+
+    textarea:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: -1px;
+    }
+
+    #params {
+      min-height: 156px;
+    }
+
+    #json-error {
+      margin: 6px 0 0;
+      color: var(--signal);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      line-height: 1.5;
+    }
+
+    .input-block {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .input-block[hidden] {
+      display: none;
+    }
+
+    .segmented {
+      display: inline-flex;
+      border: 1px solid var(--line-strong);
+    }
+
+    .segmented label {
+      position: relative;
+    }
+
+    .segmented input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .segmented span {
+      display: block;
+      padding: 3px 9px;
+      border-left: 1px solid var(--line);
+      background: var(--panel-bright);
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+
+    .segmented label:first-child span {
+      border-left: 0;
+    }
+
+    .segmented input:checked + span {
+      background: var(--ink);
+      color: var(--panel-bright);
+    }
+
+    .segmented input:focus-visible + span {
+      outline: 2px solid var(--blue);
+      outline-offset: -2px;
+    }
+
+    #input-text {
+      min-height: 84px;
+      margin-top: 8px;
+    }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .file-row[hidden] {
+      display: none;
+    }
+
+    input[type="file"] {
+      color: var(--ink);
+      font-size: 12px;
+    }
+
+    input[type="file"]::file-selector-button {
+      margin-right: 8px;
+      padding: 3px 8px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel-bright);
+      color: var(--ink);
+      font-size: 11.5px;
+      cursor: pointer;
+    }
+
+    .file-name {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 14px;
+      border-top: 1px solid var(--line-strong);
+    }
+
+    button.primary {
+      padding: 7px 16px;
+      border: 1px solid var(--ink);
+      background: var(--blue);
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 3px 3px 0 var(--ink);
+      transition: transform 80ms ease, box-shadow 80ms ease, background-color 80ms ease;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--blue-bright);
+      transform: translate(-1px, -1px);
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    button.primary:active:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0 var(--ink);
+    }
+
+    button.primary:focus-visible {
+      outline-color: var(--ink);
+    }
+
+    button.primary:disabled {
+      box-shadow: none;
+    }
+
+    .activity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .activity .metric {
+      padding-left: 10px;
+      border-left: 1px solid var(--line);
+    }
+
+    .activity .metric:first-child {
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .activity.is-error {
+      color: var(--signal);
+    }
+
+    .output {
+      margin-top: 22px;
+    }
+
+    .output-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid var(--ink);
+    }
+
+    .output-head h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .output-summary {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-align: right;
+    }
+
+    .empty {
+      margin-top: 12px;
+      padding: 26px 18px;
+      border: 1px dashed var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .empty[hidden] {
+      display: none;
+    }
+
+    .streams {
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .streams.is-pair {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .stream {
+      min-width: 0;
+      border: 1px solid var(--console-line);
+      background: var(--console);
+      color: var(--console-text);
+    }
+
+    .stream-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--console-line);
+      background: var(--console-2);
+    }
+
+    .stream-name {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .stream-state {
+      color: var(--console-dim);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .stream-state.is-complete {
+      color: #9ec7b4;
+    }
+
+    .stream-bytes {
+      margin-left: auto;
+      color: var(--console-dim);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .stream-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .stream-actions button {
+      padding: 1px 5px;
+      border: 1px solid var(--console-line);
+      background: none;
+      color: var(--console-dim);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .stream-actions button:hover {
+      border-color: var(--console-dim);
+      color: var(--console-text);
+    }
+
+    .stream-actions button.is-active {
+      border-color: var(--console-text);
+      background: var(--console-text);
+      color: var(--console);
+    }
+
+    .stream-body {
+      max-height: 340px;
+      margin: 0;
+      padding: 10px 12px;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .stream-body.is-hex {
+      white-space: pre;
+      word-break: normal;
+    }
+
+    .entries-wrap {
+      max-height: 340px;
+      overflow: auto;
+    }
+
+    table.entries {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+    }
+
+    .entries th {
+      position: sticky;
+      top: 0;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--console-line);
+      background: var(--console);
+      color: var(--console-dim);
+      font-size: 10.5px;
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .entries td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #1d2a2d;
+      color: var(--console-text);
+      font-family: var(--font-mono);
+      vertical-align: top;
+    }
+
+    .entries tr:hover td {
+      background: #162225;
+    }
+
+    .entries .name {
+      color: #eaf1ed;
+    }
+
+    .entries .path {
+      max-width: 34ch;
+      overflow: hidden;
+      color: var(--console-dim);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .type {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .type::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: currentColor;
+    }
+
+    .type-file {
+      color: #9ec7b4;
+    }
+
+    .type-dir {
+      color: #8db4df;
+    }
+
+    .type-link {
+      color: #d8ab6a;
+    }
+
+    .type-other {
+      color: #a9b3b1;
+    }
+
+    .result {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--blue);
+      background: var(--panel);
+    }
+
+    .result[hidden] {
+      display: none;
+    }
+
+    .result.is-error {
+      border-left-color: var(--signal);
+    }
+
+    .result-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .result-head h3 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .result-tag {
+      padding: 0 5px;
+      border: 1px solid currentColor;
+      color: var(--blue);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .result.is-error .result-tag {
+      color: var(--signal);
+    }
+
+    .result-note {
+      margin-left: auto;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .result pre {
+      max-height: 260px;
+      margin: 0;
+      padding: 10px 12px;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .result p.message {
+      margin: 0;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .event-log {
+      margin-top: 22px;
+      border-top: 1px solid var(--line-strong);
+    }
+
+    .event-log summary {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .event-log summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .event-log summary::before {
+      content: "+";
+      width: 14px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 14px;
+    }
+
+    .event-log[open] summary::before {
+      content: "−";
+    }
+
+    .log-count {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 400;
+    }
+
+    .log-flag {
+      display: none;
+      width: 7px;
+      height: 7px;
+      background: var(--signal);
+    }
+
+    .event-log.has-error .log-flag {
+      display: block;
+    }
+
+    .log-body {
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .log-tools {
+      display: flex;
+      justify-content: flex-end;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .log-table-wrap {
+      max-height: 230px;
+      overflow: auto;
+    }
+
+    table.log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+
+    .log-table th {
+      position: sticky;
+      top: 0;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      font-weight: 600;
+      text-align: left;
+    }
+
+    .log-table td {
+      padding: 4px 8px;
+      border-bottom: 1px solid #dde1de;
+      vertical-align: top;
+    }
+
+    .log-table .time {
+      color: var(--faint);
+      white-space: nowrap;
+    }
+
+    .log-table .kind {
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .log-table .detail {
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    .log-table tr.is-error .kind,
+    .log-table tr.is-error .detail {
+      color: var(--signal);
+    }
+
+    .footer {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 34px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+    }
+
+    .footer a {
+      color: var(--blue);
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 1100px) {
+      .masthead {
+        grid-template-columns: 1fr;
+        gap: 22px;
+      }
+
+      .wire {
+        max-width: 560px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+        gap: 22px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .section-note {
+        margin-top: 0;
+        text-align: right;
+      }
+
+      .connection-body {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 10px 14px;
+        padding: 14px;
+      }
+
+      .connection-action {
+        width: auto;
+        min-width: 112px;
+      }
+
+      .connection-meta {
+        grid-column: 1 / -1;
+        gap: 12px;
+      }
+
+      .op-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 18px;
+      }
+
+      .op-group {
+        break-inside: avoid;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .page {
+        padding: 0 16px 32px;
+      }
+
+      .masthead {
+        padding-top: 22px;
+      }
+
+      h1 {
+        font-size: 30px;
+      }
+
+      .op-list {
+        grid-template-columns: 1fr;
+      }
+
+      .streams.is-pair {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        align-items: stretch;
+      }
+
+      button.primary {
+        width: 100%;
+      }
+
+      .activity {
+        width: 100%;
+      }
+
+      .wire-endpoint {
+        width: 100%;
+        order: 3;
+      }
+
+      .field-note {
+        margin-left: 0;
+        text-align: left;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+      }
+
+      .wire.is-busy .packet {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="masthead">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 34 34" aria-hidden="true">
+          <rect x="0.75" y="0.75" width="32.5" height="32.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+          <circle cx="10.5" cy="17" r="3.5" fill="currentColor"></circle>
+          <path d="M14 17h16" stroke="currentColor" stroke-width="1.5"></path>
+        </svg>
+        <div>
+          <h1>Open ePort Runtime</h1>
+          <p class="subtitle">Run programs, read and write files, and call HTTP from this machine.</p>
+        </div>
+      </div>
+
+      <div class="wire" id="wire">
+        <div class="wire-labels">
+          <span>this page</span>
+          <span>agent</span>
+        </div>
+        <div class="wire-track-row">
+          <span class="port source"></span>
+          <span class="track"><span class="packet"></span></span>
+          <span class="port target"></span>
+        </div>
+        <div class="wire-foot">
+          <span class="wire-state" id="wire-state" aria-live="polite">offline</span>
+          <span class="wire-endpoint" id="endpoint">ws://127.0.0.1:26099/</span>
+          <span class="wire-protocol" id="protocol">eport-runtime.v1</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div class="rail">
+        <section class="connection" aria-labelledby="connection-title">
+          <div class="section-head">
+            <h2 id="connection-title">Connection</h2>
+            <span class="section-note">The agent serves a WebSocket on loopback.</span>
+          </div>
+          <div class="connection-body">
+            <label class="endpoint-field" for="connection-endpoint">
+              <span class="field-label">Endpoint</span>
+              <input id="connection-endpoint" type="text" value="ws://127.0.0.1:26099/" readonly spellcheck="false" autocapitalize="off" autocomplete="off">
+            </label>
+            <button type="button" class="primary connection-action" id="connect">Connect</button>
+            <div class="connection-meta">
+              <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+              <span id="status" aria-live="polite">offline</span>
+            </div>
+          </div>
+        </section>
+
+        <nav class="ops" aria-label="Operations">
+          <div class="rail-head">
+            <h2>Operations</h2>
+            <span id="op-count"></span>
+          </div>
+          <div class="op-list" id="ops"></div>
+          <p class="rail-note">One connection carries one job at a time. Open a second tab for parallel work.</p>
+        </nav>
+      </div>
+
+      <div class="bench">
+        <section class="request-panel" aria-labelledby="request-title">
+          <div class="panel-head">
+            <h2 id="request-title">Request</h2>
+            <span class="op-badge" id="op-badge">fs.list</span>
+          </div>
+          <div class="panel-body">
+            <div class="field-head">
+              <label for="params">Parameters</label>
+              <button type="button" class="link-button" id="example">Use example</button>
+              <span class="field-note" id="json-state">Valid JSON</span>
+            </div>
+            <textarea id="params" rows="8" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="json-error"></textarea>
+            <p id="json-error" hidden></p>
+
+            <div class="input-block" id="input-block">
+              <div class="field-head">
+                <span class="label">Input</span>
+                <div class="segmented" role="group" aria-label="Input source">
+                  <label><input type="radio" name="input-mode" value="none" checked><span>None</span></label>
+                  <label><input type="radio" name="input-mode" value="text"><span>Text</span></label>
+                  <label><input type="radio" name="input-mode" value="file"><span>File</span></label>
+                </div>
+                <span class="field-note" id="input-kind">stdin</span>
+              </div>
+              <textarea id="input-text" rows="3" spellcheck="false" placeholder="Bytes typed here are sent unchanged.">hello from the browser
+</textarea>
+              <div class="file-row" id="file-wrap" hidden>
+                <input type="file" id="input-file">
+                <span class="file-name" id="file-name">No file chosen</span>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="primary" id="run" disabled>Send request</button>
+            <div class="activity" id="activity" aria-live="polite">
+              <span class="metric">offline</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="output" aria-labelledby="output-title">
+          <div class="output-head">
+            <h2 id="output-title">Output</h2>
+            <span class="output-summary" id="output-summary">waiting for a request</span>
+          </div>
+          <div class="empty" id="empty">
+            <strong>No request sent yet.</strong>
+            Choose an operation, connect to the agent, then send it.
+          </div>
+          <div class="streams" id="streams"></div>
+          <div class="result" id="result" hidden></div>
+        </section>
+
+        <details class="event-log" id="event-log">
+          <summary>
+            <span>Event log</span>
+            <span class="log-count" id="log-count">0 events</span>
+            <span class="log-flag" id="log-flag" aria-hidden="true"></span>
+          </summary>
+          <div class="log-body">
+            <div class="log-tools">
+              <button type="button" class="secondary" id="clear-log">Clear log</button>
+            </div>
+            <div class="log-table-wrap">
+              <table class="log-table">
+                <thead>
+                  <tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">Detail</th></tr>
+                </thead>
+                <tbody id="log-rows"></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <span>Open ePort Runtime 1.0.0</span>
+      <span>AGPL-3.0-only</span>
+      <a href="README.md">README</a>
+      <a href="DESIGN.md">DESIGN</a>
+      <a href="PROTOCOL.md">PROTOCOL</a>
+    </footer>
+  </div>
+
+  <script src="dist/eport-runtime.iife.min.js"></script>
+  <script>
+    (() => {
+      "use strict";
+
+      const sdk = globalThis.EportRuntime;
+      const ui = {
+        wire: document.getElementById("wire"),
+        wireState: document.getElementById("wire-state"),
+        endpoint: document.getElementById("endpoint"),
+        protocol: document.getElementById("protocol"),
+        connect: document.getElementById("connect"),
+        connectionEndpoint: document.getElementById("connection-endpoint"),
+        status: document.getElementById("status"),
+        statusDot: document.getElementById("status-dot"),
+        ops: document.getElementById("ops"),
+        opCount: document.getElementById("op-count"),
+        opBadge: document.getElementById("op-badge"),
+        params: document.getElementById("params"),
+        jsonState: document.getElementById("json-state"),
+        jsonError: document.getElementById("json-error"),
+        example: document.getElementById("example"),
+        inputBlock: document.getElementById("input-block"),
+        inputKind: document.getElementById("input-kind"),
+        inputText: document.getElementById("input-text"),
+        inputFile: document.getElementById("input-file"),
+        fileWrap: document.getElementById("file-wrap"),
+        fileName: document.getElementById("file-name"),
+        run: document.getElementById("run"),
+        activity: document.getElementById("activity"),
+        outputSummary: document.getElementById("output-summary"),
+        streams: document.getElementById("streams"),
+        empty: document.getElementById("empty"),
+        result: document.getElementById("result"),
+        eventLog: document.getElementById("event-log"),
+        logRows: document.getElementById("log-rows"),
+        logCount: document.getElementById("log-count"),
+        clearLog: document.getElementById("clear-log"),
+      };
+
+      const OP_ORDER = [
+        "exec.run",
+        "fs.list",
+        "fs.read",
+        "fs.write",
+        "fs.stat",
+        "fs.delete",
+        "http.request",
+        "http.cookies.get",
+        "http.cookies.set",
+        "card.list",
+        "card.verify",
+        "card.sign",
+      ];
+
+      const OPS = {
+        "exec.run": {
+          group: "Run",
+          description: "Run a program",
+          input: "stdin",
+          example: { file: "node", args: ["-e", "console.log('hello from the agent')"] },
+          send: (agent, params, io) => agent.exec.run(params, io),
+        },
+        "fs.list": {
+          group: "Files",
+          description: "Walk a directory",
+          input: null,
+          example: { path: ".", recursive: false },
+          send: (agent, params, io) => agent.fs.list(params, io),
+        },
+        "fs.read": {
+          group: "Files",
+          description: "Read a file",
+          input: null,
+          example: { path: "README.md" },
+          send: (agent, params, io) => agent.fs.read(params, io),
+        },
+        "fs.write": {
+          group: "Files",
+          description: "Write a file",
+          input: "file content",
+          example: { path: "agent-write-test.txt" },
+          send: (agent, params, io) => agent.fs.write(params, io),
+        },
+        "fs.stat": {
+          group: "Files",
+          description: "Inspect a path",
+          input: null,
+          example: { path: "." },
+          send: (agent, params) => agent.fs.stat(params),
+        },
+        "fs.delete": {
+          group: "Files",
+          description: "Delete a path",
+          input: null,
+          example: { path: "agent-write-test.txt" },
+          send: (agent, params) => agent.fs.delete(params),
+        },
+        "http.request": {
+          group: "Network",
+          description: "Make a request",
+          input: "request body",
+          example: { url: "https://example.com/" },
+          send: (agent, params, io) => agent.http.request(params, io),
+        },
+        "http.cookies.get": {
+          group: "Network",
+          description: "Read cookies",
+          input: null,
+          example: {},
+          send: (agent) => agent.http.cookies.get(),
+        },
+        "http.cookies.set": {
+          group: "Network",
+          description: "Replace cookies",
+          input: null,
+          example: {
+            cookies: [
+              { name: "demo", value: "1", path: "/", secure: false, httpOnly: false },
+            ],
+          },
+          send: (agent, params) => agent.http.cookies.set(params),
+        },
+        "card.list": {
+          group: "Cards",
+          description: "List cards",
+          input: null,
+          example: {},
+          send: (agent) => agent.card.list(),
+        },
+        "card.verify": {
+          group: "Cards",
+          description: "Verify a PIN",
+          input: null,
+          example: { device: "[HID] ...", deviceId: "...", pin: "88888888" },
+          send: (agent, params) => agent.card.verify(params),
+        },
+        "card.sign": {
+          group: "Cards",
+          description: "Sign the input",
+          input: "message",
+          example: { device: "[HID] ...", deviceId: "...", pin: "88888888" },
+          send: (agent, params, io) => agent.card.sign(params, io),
+        },
+      };
+
+      const GROUPS = ["Run", "Files", "Network", "Cards"];
+      const TEXT_PREVIEW_BYTES = 128 * 1024;
+      // Bytes past this limit still count toward the progress total but are not
+      // kept, so a huge response cannot exhaust memory.
+      const BUFFER_LIMIT_BYTES = 128 * 1024;
+      const HEX_PREVIEW_BYTES = 4 * 1024;
+      const MAX_ENTRY_ROWS = 2000;
+      const MAX_LOG_ROWS = 400;
+      const PROGRESS_REFRESH_MS = 50;
+      const CONNECT_TIMEOUT_MS = 1000;
+
+      // UI state. streams is keyed by wire stream name (stdout, content, entries,
+      // body), so chunks and parsed entries land in the same panel.
+      const state = {
+        agent: null,
+        connecting: false,
+        running: false,
+        selected: "fs.list",
+        inputMode: "none",
+        file: null,
+        streams: new Map(),
+        startedAt: 0,
+        sentBytes: 0,
+        receivedBytes: 0,
+        runParams: {},
+        logTotal: 0,
+        timers: new Set(),
+      };
+
+      const perOpParams = new Map();
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) {
+          node.className = className;
+        }
+        if (text !== undefined) {
+          node.textContent = text;
+        }
+        return node;
+      }
+
+      function formatBytes(bytes) {
+        if (bytes < 1024) {
+          return `${bytes} B`;
+        }
+        if (bytes < 1024 * 1024) {
+          return `${(bytes / 1024).toFixed(1)} KiB`;
+        }
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+      }
+
+      function formatTime(ms) {
+        const date = new Date(ms);
+        const pad = (value) => String(value).padStart(2, "0");
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      }
+
+      function clockTime() {
+        const date = new Date();
+        const pad = (value) => String(value).padStart(2, "0");
+        return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+      }
+
+      function describeError(error) {
+        if (error === null || error === undefined) {
+          return "Unknown error";
+        }
+        const name = error.name && error.name !== "Error" ? `${error.name}: ` : "";
+        return `${name}${error.message || String(error)}`;
+      }
+
+      function basename(value) {
+        if (typeof value !== "string" || value.length === 0) {
+          return null;
+        }
+        const parts = value.split(/[\\/]/);
+        return parts[parts.length - 1] || null;
+      }
+
+      function compactJson(value, limit = 180) {
+        let text;
+        try {
+          text = JSON.stringify(value);
+        } catch {
+          text = String(value);
+        }
+        return text.length > limit ? `${text.slice(0, limit)}…` : text;
+      }
+
+      function log(kind, detail, isError = false) {
+        const row = document.createElement("tr");
+        if (isError) {
+          row.className = "is-error";
+        }
+        row.append(
+          element("td", "time", clockTime()),
+          element("td", "kind", kind),
+          element("td", "detail", detail),
+        );
+        ui.logRows.append(row);
+        state.logTotal += 1;
+
+        while (ui.logRows.children.length > MAX_LOG_ROWS) {
+          ui.logRows.firstElementChild.remove();
+        }
+
+        ui.logCount.textContent = `${state.logTotal} ${state.logTotal === 1 ? "event" : "events"}`;
+        if (isError) {
+          ui.eventLog.classList.add("has-error");
+        }
+
+        if (ui.eventLog.open) {
+          const wrap = ui.logRows.parentElement.parentElement;
+          wrap.scrollTop = wrap.scrollHeight;
+        }
+      }
+
+      function clearLog() {
+        ui.logRows.replaceChildren();
+        state.logTotal = 0;
+        ui.logCount.textContent = "0 events";
+        ui.eventLog.classList.remove("has-error");
+      }
+
+      function setWire(mode) {
+        ui.wire.classList.toggle("is-connected", mode === "connected" || mode === "busy");
+        ui.wire.classList.toggle("is-busy", mode === "busy");
+        ui.wire.classList.toggle("is-connecting", mode === "connecting");
+        ui.wire.classList.toggle("is-error", mode === "error");
+
+        const labels = {
+          offline: "offline",
+          connecting: "connecting",
+          connected: "connected",
+          busy: "running",
+          error: "connection failed",
+        };
+        ui.wireState.textContent = labels[mode] || mode;
+        ui.status.textContent = labels[mode] || mode;
+        ui.statusDot.classList.toggle("is-on", mode === "connected" || mode === "busy");
+        ui.statusDot.classList.toggle("is-error", mode === "error");
+      }
+
+      function updateConnectionUi() {
+        if (state.connecting) {
+          ui.connect.textContent = "Connecting…";
+          ui.connect.disabled = true;
+          setWire("connecting");
+        } else if (state.agent) {
+          ui.connect.textContent = "Disconnect";
+          ui.connect.disabled = false;
+          if (!state.running) {
+            setWire("connected");
+          }
+        } else {
+          ui.connect.textContent = "Connect";
+          ui.connect.disabled = false;
+          if (!ui.wire.classList.contains("is-error")) {
+            setWire("offline");
+          }
+        }
+
+        updateRunState();
+      }
+
+      function markDisconnected(message) {
+        state.agent = null;
+        state.connecting = false;
+        setWire("offline");
+        ui.connect.textContent = "Connect";
+        ui.connect.disabled = false;
+        if (message) {
+          ui.activity.classList.add("is-error");
+          ui.activity.replaceChildren(element("span", "metric", message));
+        }
+        updateRunState();
+        updateEmptyCopy();
+      }
+
+      function updateEmptyCopy() {
+        if (state.running) {
+          return;
+        }
+        ui.empty.querySelector("strong").textContent = "No request sent yet.";
+        ui.empty.lastChild.textContent = state.agent
+          ? "\n            Choose an operation, then send it."
+          : "\n            Connect; the browser wakes the agent, then send a request.";
+      }
+
+      function buildOperationList() {
+        for (const group of GROUPS) {
+          const section = element("section", "op-group");
+          section.append(element("h3", null, group));
+
+          for (const op of OP_ORDER) {
+            if (OPS[op].group !== group) {
+              continue;
+            }
+            const button = element("button", "op");
+            button.type = "button";
+            button.dataset.op = op;
+            button.setAttribute("aria-pressed", "false");
+            button.append(
+              element("span", "op-name", op),
+              element("span", "op-desc", OPS[op].description),
+            );
+            button.addEventListener("click", () => selectOperation(op));
+            section.append(button);
+          }
+
+          ui.ops.append(section);
+        }
+
+        ui.opCount.textContent = `${ui.ops.querySelectorAll(".op").length} available`;
+      }
+
+      function selectOperation(op) {
+        if (state.running || !OPS[op]) {
+          return;
+        }
+
+        perOpParams.set(state.selected, ui.params.value);
+        state.selected = op;
+
+        for (const button of ui.ops.querySelectorAll(".op")) {
+          button.setAttribute("aria-pressed", String(button.dataset.op === op));
+        }
+
+        ui.opBadge.textContent = op;
+        ui.params.value = perOpParams.get(op) ?? JSON.stringify(OPS[op].example, null, 2);
+        ui.params.scrollTop = 0;
+        validateParams();
+        updateInputBlock();
+      }
+
+      function resetExample() {
+        ui.params.value = JSON.stringify(OPS[state.selected].example, null, 2);
+        perOpParams.delete(state.selected);
+        validateParams();
+      }
+
+      function parseParams() {
+        let value;
+        try {
+          value = JSON.parse(ui.params.value);
+        } catch (error) {
+          return { ok: false, reason: error.message };
+        }
+
+        if (value === null || typeof value !== "object" || Array.isArray(value)) {
+          return { ok: false, reason: "Parameters must be a JSON object." };
+        }
+
+        return { ok: true, value };
+      }
+
+      function validateParams() {
+        const parsed = parseParams();
+        ui.jsonState.textContent = parsed.ok ? "Valid JSON" : "Invalid JSON";
+        ui.jsonState.classList.toggle("is-error", !parsed.ok);
+        ui.jsonError.hidden = parsed.ok;
+        ui.jsonError.textContent = parsed.ok ? "" : parsed.reason;
+        updateRunState();
+      }
+
+      function updateInputBlock() {
+        const input = OPS[state.selected].input;
+        ui.inputBlock.hidden = input === null;
+        if (input !== null) {
+          ui.inputKind.textContent = input;
+        }
+        updateInputVisibility();
+      }
+
+      function updateInputVisibility() {
+        const textSelected = state.inputMode === "text";
+        const fileSelected = state.inputMode === "file";
+        ui.inputText.hidden = !textSelected;
+        ui.fileWrap.hidden = !fileSelected;
+      }
+
+      function updateRunState() {
+        const parsed = parseParams();
+        ui.run.disabled = !state.agent || state.running || state.connecting || !parsed.ok;
+        ui.ops.querySelectorAll(".op").forEach((button) => {
+          button.disabled = state.running;
+        });
+      }
+
+      function setActivity(parts, isError = false) {
+        ui.activity.replaceChildren();
+        ui.activity.classList.toggle("is-error", isError);
+        for (const part of parts) {
+          ui.activity.append(element("span", "metric", part));
+        }
+      }
+
+      function clearOutput() {
+        for (const timer of state.timers) {
+          window.clearTimeout(timer);
+        }
+        state.timers.clear();
+
+        state.streams.clear();
+        ui.streams.replaceChildren();
+        ui.streams.classList.remove("is-pair");
+        ui.result.hidden = true;
+        ui.result.replaceChildren();
+        ui.result.classList.remove("is-error");
+        ui.empty.hidden = false;
+        ui.outputSummary.textContent = "waiting for the agent";
+      }
+
+      // Coalesce a burst of chunks into one repaint per stream; the delay matches
+      // PROGRESS_REFRESH_MS.
+      function scheduleRender(record) {
+        if (record.timer !== 0) {
+          return;
+        }
+
+        record.timer = window.setTimeout(() => {
+          state.timers.delete(record.timer);
+          record.timer = 0;
+          renderStream(record);
+        }, 50);
+        state.timers.add(record.timer);
+      }
+
+      function streamRecord(name) {
+        let record = state.streams.get(name);
+        if (record !== undefined) {
+          return record;
+        }
+
+        record = {
+          name,
+          kind: name === "entries" ? "entries" : "bytes",
+          chunks: [],
+          entries: [],
+          bytes: 0,
+          buffered: 0,
+          truncated: false,
+          closed: false,
+          complete: false,
+          view: "auto",
+          rows: 0,
+          footer: false,
+          timer: 0,
+          panel: null,
+          pre: null,
+          body: null,
+          stateLabel: null,
+          bytesLabel: null,
+          textButton: null,
+          hexButton: null,
+          saveButton: null,
+        };
+
+        createStreamPanel(record);
+        state.streams.set(name, record);
+        ui.empty.hidden = true;
+
+        if (state.streams.has("stdout") && state.streams.has("stderr")) {
+          ui.streams.classList.add("is-pair");
+        }
+
+        return record;
+      }
+
+      function createStreamPanel(record) {
+        const section = element("section", "stream");
+        section.dataset.stream = record.name;
+
+        const head = element("div", "stream-head");
+        const name = element("span", "stream-name", record.name);
+        const stateLabel = element("span", "stream-state", "streaming");
+        const bytesLabel = element("span", "stream-bytes", "0 B");
+        const actions = element("div", "stream-actions");
+        head.append(name, stateLabel, bytesLabel, actions);
+
+        const body = element("div");
+        let pre = null;
+
+        if (record.kind === "entries") {
+          body.className = "entries-wrap";
+          const table = element("table", "entries");
+          const thead = document.createElement("thead");
+          const headRow = document.createElement("tr");
+          for (const heading of ["Name", "Type", "Size", "Modified", "Path"]) {
+            const th = element("th", null, heading);
+            th.scope = "col";
+            headRow.append(th);
+          }
+          thead.append(headRow);
+          table.append(thead, element("tbody"));
+          body.append(table);
+          record.body = table.querySelector("tbody");
+        } else {
+          pre = element("pre", "stream-body");
+          body.append(pre);
+          record.pre = pre;
+
+          for (const [label, view] of [["Text", "text"], ["Hex", "hex"]]) {
+            const button = element("button", null, label);
+            button.type = "button";
+            button.addEventListener("click", () => {
+              record.view = view;
+              renderStream(record);
+            });
+            actions.append(button);
+            if (view === "text") {
+              record.textButton = button;
+            } else {
+              record.hexButton = button;
+            }
+          }
+
+          const save = element("button", null, "Save");
+          save.type = "button";
+          save.hidden = true;
+          save.addEventListener("click", () => saveStream(record));
+          actions.append(save);
+          record.saveButton = save;
+        }
+
+        section.append(head, body);
+        ui.streams.append(section);
+        record.panel = section;
+        record.stateLabel = stateLabel;
+        record.bytesLabel = bytesLabel;
+      }
+
+      function appendChunk(stream, chunk) {
+        const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        const record = streamRecord(stream);
+
+        if (record.buffered < BUFFER_LIMIT_BYTES) {
+          const kept = bytes.subarray(0, BUFFER_LIMIT_BYTES - record.buffered);
+          record.chunks.push(kept);
+          record.buffered += kept.length;
+          if (kept.length < bytes.length) {
+            record.truncated = true;
+          }
+        } else if (bytes.length > 0) {
+          record.truncated = true;
+        }
+
+        record.bytes += bytes.length;
+        state.receivedBytes += bytes.length;
+        scheduleRender(record);
+        updateLiveSummary();
+      }
+
+      function appendEntry(entry) {
+        const record = streamRecord("entries");
+        record.entries.push(entry);
+        scheduleRender(record);
+        updateLiveSummary();
+      }
+
+      function updateLiveSummary() {
+        if (!state.running) {
+          return;
+        }
+        ui.outputSummary.textContent = `${formatBytes(state.receivedBytes)} received`;
+      }
+
+      function renderStream(record) {
+        if (record.kind === "entries") {
+          renderEntries(record);
+          return;
+        }
+
+        record.bytesLabel.textContent = record.truncated
+          ? `${formatBytes(record.bytes)} (buffered ${formatBytes(record.buffered)})`
+          : formatBytes(record.bytes);
+        if (record.saveButton) {
+          record.saveButton.hidden = record.bytes === 0 || record.truncated;
+          record.saveButton.title = record.truncated ? "Output was too large to buffer." : "";
+        }
+
+        const view = record.view === "auto"
+          ? (looksLikeText(record.chunks) ? "text" : "hex")
+          : record.view;
+
+        if (record.textButton) {
+          record.textButton.classList.toggle("is-active", view === "text");
+          record.hexButton.classList.toggle("is-active", view === "hex");
+        }
+
+        if (view === "text") {
+          const bytes = collectPreview(record.chunks, TEXT_PREVIEW_BYTES);
+          let text = decoder.decode(bytes);
+          if (record.bytes > bytes.length) {
+            text += `\n\n[preview truncated at ${formatBytes(bytes.length)} of ${formatBytes(record.bytes)}]`;
+          }
+          record.pre.classList.remove("is-hex");
+          record.pre.textContent = text;
+        } else {
+          record.pre.classList.add("is-hex");
+          record.pre.textContent = hexDump(collectPreview(record.chunks, HEX_PREVIEW_BYTES), record.bytes);
+        }
+
+        record.stateLabel.textContent = record.closed
+          ? (record.complete ? "complete" : "incomplete")
+          : "streaming";
+        record.stateLabel.classList.toggle("is-complete", record.complete);
+      }
+
+      function renderEntries(record) {
+        const total = record.entries.length;
+        record.bytesLabel.textContent = `${total} ${total === 1 ? "entry" : "entries"}`;
+
+        const limit = Math.min(total, MAX_ENTRY_ROWS);
+        for (let index = record.rows; index < limit; index++) {
+          const entry = record.entries[index];
+          const row = document.createElement("tr");
+
+          const name = element("td", "name", entry.name);
+          const typeCell = document.createElement("td");
+          const type = element("span", `type type-${entry.type}`, entry.type);
+          typeCell.append(type);
+
+          const size = element(
+            "td",
+            null,
+            typeof entry.size === "number" ? formatBytes(entry.size) : "—",
+          );
+          const modified = element("td", null, formatTime(entry.mtimeMs));
+          const path = element("td", "path", entry.path);
+          path.title = entry.path;
+
+          row.append(name, typeCell, size, modified, path);
+          record.body.append(row);
+          record.rows += 1;
+        }
+
+        if (total > MAX_ENTRY_ROWS && !record.footer) {
+          const row = document.createElement("tr");
+          const cell = element("td", "path", `Showing the first ${MAX_ENTRY_ROWS} entries.`);
+          cell.colSpan = 5;
+          row.append(cell);
+          record.body.append(row);
+          record.footer = true;
+        }
+
+        record.stateLabel.textContent = record.closed
+          ? (record.complete ? "complete" : "incomplete")
+          : "streaming";
+        record.stateLabel.classList.toggle("is-complete", record.complete);
+      }
+
+      function collectPreview(chunks, limit) {
+        const total = Math.min(
+          chunks.reduce((sum, chunk) => sum + chunk.length, 0),
+          limit,
+        );
+        const output = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          if (offset >= total) {
+            break;
+          }
+          const take = Math.min(chunk.length, total - offset);
+          output.set(chunk.subarray(0, take), offset);
+          offset += take;
+        }
+        return output;
+      }
+
+      function looksLikeText(chunks) {
+        const bytes = collectPreview(chunks, TEXT_PREVIEW_BYTES);
+        if (bytes.length === 0) {
+          return true;
+        }
+        if (bytes.includes(0)) {
+          return false;
+        }
+
+        for (let cut = 0; cut <= 3 && cut < bytes.length; cut++) {
+          try {
+            new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, bytes.length - cut));
+            return true;
+          } catch {
+          }
+        }
+
+        return false;
+      }
+
+      function hexDump(bytes, totalBytes) {
+        const lines = [];
+        for (let offset = 0; offset < bytes.length; offset += 16) {
+          const row = bytes.subarray(offset, Math.min(offset + 16, bytes.length));
+          const hex = Array.from(row, (byte) => byte.toString(16).padStart(2, "0"));
+          const ascii = Array.from(row, (byte) => (byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : "."));
+          lines.push(
+            `${offset.toString(16).padStart(8, "0")}  ${hex.join(" ").padEnd(47, " ")}  ${ascii.join("")}`,
+          );
+        }
+        if (totalBytes > bytes.length) {
+          lines.push("");
+          lines.push(`[hex preview truncated at ${formatBytes(bytes.length)} of ${formatBytes(totalBytes)}]`);
+        }
+        return lines.join("\n");
+      }
+
+      function saveStream(record) {
+        if (record.bytes === 0) {
+          return;
+        }
+        let name = `${record.name}.bin`;
+        if (record.name === "content") {
+          name = basename(state.runParams.path) || "content.bin";
+        } else if (record.name === "body") {
+          name = "response.bin";
+        } else if (record.name === "stdout") {
+          name = "stdout.bin";
+        } else if (record.name === "stderr") {
+          name = "stderr.bin";
+        }
+        const blob = new Blob(record.chunks, { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        log("save", `${name}, ${formatBytes(record.bytes)}`);
+      }
+
+      // Freeze every panel and remember whether the operation ended normally, so
+      // late chunks cannot change the display.
+      function markStreamsComplete(success) {
+        for (const record of state.streams.values()) {
+          record.closed = true;
+          record.complete = success;
+          if (record.timer !== 0) {
+            window.clearTimeout(record.timer);
+            state.timers.delete(record.timer);
+            record.timer = 0;
+          }
+          renderStream(record);
+        }
+      }
+
+      function inputSize(input) {
+        if (!input) {
+          return 0;
+        }
+        if (input instanceof Blob) {
+          return input.size;
+        }
+        return input.byteLength ?? 0;
+      }
+
+      async function buildInput() {
+        if (!OPS[state.selected].input || state.inputMode === "none") {
+          return undefined;
+        }
+        if (state.inputMode === "text") {
+          return encoder.encode(ui.inputText.value);
+        }
+        if (state.file === null) {
+          throw new Error("Choose a file before sending.");
+        }
+        // A File goes to the SDK as a stream; reading it into one ArrayBuffer
+        // would cap uploads at about 2 GiB.
+        return state.file;
+      }
+
+      function invokeOperation(op, params, io) {
+        return OPS[op].send(state.agent, params, io);
+      }
+
+      // The run controls stay disabled until the operation settles, because the
+      // connection carries one job at a time.
+      async function runRequest() {
+        if (!state.agent || state.running) {
+          return;
+        }
+
+        const parsed = parseParams();
+        if (!parsed.ok) {
+          validateParams();
+          return;
+        }
+
+        if (OPS[state.selected].input && state.inputMode === "file" && state.file === null) {
+          setActivity(["Choose a file first."], true);
+          return;
+        }
+
+        const op = state.selected;
+        const params = parsed.value;
+        let input;
+
+        try {
+          input = await buildInput();
+        } catch (error) {
+          setActivity([error.message || String(error)], true);
+          return;
+        }
+
+        let uploadTotal = inputSize(input);
+        state.running = true;
+        state.startedAt = performance.now();
+        state.sentBytes = 0;
+        state.receivedBytes = 0;
+        state.runParams = params;
+        setActivity([
+          uploadTotal > 0
+            ? `sending 0 B / ${formatBytes(uploadTotal)}`
+            : "sending 0 B",
+          "received 0 B",
+        ]);
+        ui.activity.classList.remove("is-error");
+        ui.outputSummary.textContent = "request in flight";
+        clearOutput();
+        ui.empty.hidden = true;
+        ui.result.hidden = true;
+        updateRunState();
+        setWire("busy");
+        log("request", `${op} ${compactJson(params)}`);
+
+        const io = {};
+        if (input !== undefined) {
+          io.input = input;
+        }
+        if (input !== undefined) {
+          let lastProgressAt = 0;
+          io.onProgress = (sent, total) => {
+            state.sentBytes = sent;
+            if (total !== null) {
+              uploadTotal = total;
+            }
+
+            const percent = uploadTotal > 0
+              ? Math.min(100, Math.floor((sent / uploadTotal) * 100))
+              : 0;
+            const complete = uploadTotal > 0 && sent >= uploadTotal;
+            const now = performance.now();
+            if (!complete && now - lastProgressAt < PROGRESS_REFRESH_MS) {
+              return;
+            }
+
+            lastProgressAt = now;
+            setActivity([
+              uploadTotal > 0
+                ? `sending ${percent}% (${formatBytes(sent)} / ${formatBytes(uploadTotal)})`
+                : `sending ${formatBytes(sent)}`,
+            ]);
+            ui.outputSummary.textContent = uploadTotal > 0
+              ? `${formatBytes(sent)} / ${formatBytes(uploadTotal)} sent`
+              : `${formatBytes(sent)} sent`;
+          };
+        }
+        if (op === "exec.run") {
+          io.onStdout = (chunk) => appendChunk("stdout", chunk);
+          io.onStderr = (chunk) => appendChunk("stderr", chunk);
+        } else if (op === "fs.read") {
+          io.onChunk = (chunk) => appendChunk("content", chunk);
+        } else if (op === "fs.list") {
+          io.onEntry = (entry) => appendEntry(entry);
+        } else if (op === "http.request") {
+          io.onChunk = (chunk) => appendChunk("body", chunk);
+        }
+
+        try {
+          const result = await invokeOperation(op, params, io);
+          if (op === "fs.write" && uploadTotal > 0) {
+            state.sentBytes = uploadTotal;
+          }
+          const elapsed = Math.round(performance.now() - state.startedAt);
+          markStreamsComplete(true);
+          showResult(op, result, elapsed);
+
+          for (const record of state.streams.values()) {
+            if (record.kind === "entries") {
+              log("stream", `entries, ${record.entries.length} entries`);
+            } else {
+              log("stream", `${record.name}, ${formatBytes(record.bytes)}`);
+            }
+          }
+          log("result", `${op} completed in ${elapsed} ms`);
+
+          const summary = [];
+          if (state.receivedBytes > 0) {
+            summary.push(`${formatBytes(state.receivedBytes)} received`);
+          } else {
+            summary.push("no output");
+          }
+          summary.push(`in ${elapsed} ms`);
+          ui.outputSummary.textContent = summary.join(" ");
+          setActivity([
+            `sent ${formatBytes(state.sentBytes)}`,
+            `received ${formatBytes(state.receivedBytes)}`,
+            `${elapsed} ms`,
+          ]);
+        } catch (error) {
+          const elapsed = Math.round(performance.now() - state.startedAt);
+          markStreamsComplete(false);
+          showError(error, elapsed);
+          log("error", describeError(error), true);
+          ui.outputSummary.textContent = `failed after ${elapsed} ms`;
+          setActivity([`failed after ${elapsed} ms`], true);
+
+          if (error && (error.name === "ConnectionClosedError" || error.name === "ProtocolError")) {
+            markDisconnected("The connection closed.");
+          }
+        } finally {
+          state.running = false;
+          updateRunState();
+          if (state.agent) {
+            setWire("connected");
+          } else {
+            setWire("offline");
+          }
+          updateEmptyCopy();
+        }
+      }
+
+      function showResult(op, result, elapsed) {
+        ui.result.hidden = false;
+        ui.result.classList.remove("is-error");
+        ui.result.replaceChildren();
+
+        const head = element("div", "result-head");
+        head.append(element("h3", null, "Result"));
+        head.append(element("span", "result-tag", "ok"));
+
+        let note = `done in ${elapsed} ms`;
+        if (op === "http.request" && result && typeof result.status === "number") {
+          note = `HTTP ${result.status} in ${elapsed} ms`;
+        } else if (op === "exec.run" && result && typeof result.exitCode === "number") {
+          note = `exit ${result.exitCode} in ${elapsed} ms`;
+        } else if (op === "card.sign" && result && typeof result.algorithm === "string") {
+          note = `${result.algorithm} in ${elapsed} ms`;
+        }
+        head.append(element("span", "result-note", note));
+
+        const pre = element("pre", null, JSON.stringify(result, null, 2));
+        ui.result.append(head, pre);
+      }
+
+      function showError(error, elapsed) {
+        const code = error && error.code ? error.code : (error && error.name ? error.name : "error");
+        const message = error && error.message ? error.message : String(error);
+
+        ui.result.hidden = false;
+        ui.result.classList.add("is-error");
+        ui.result.replaceChildren();
+
+        const head = element("div", "result-head");
+        head.append(element("h3", null, "Error"));
+        head.append(element("span", "result-tag", code));
+        head.append(element("span", "result-note", `after ${elapsed} ms`));
+        ui.result.append(head, element("p", "message", message));
+      }
+
+      async function connect() {
+        if (state.connecting || state.agent) {
+          return;
+        }
+
+        state.connecting = true;
+        updateConnectionUi();
+        setActivity(["connecting to the agent"]);
+        log("connect", `connecting to ${sdk.ENDPOINT}`);
+
+        try {
+          state.agent = await sdk.connect({ timeoutMs: CONNECT_TIMEOUT_MS });
+          log("connect", `connected, protocol ${sdk.SUBPROTOCOL}`);
+          state.connecting = false;
+          updateConnectionUi();
+          setWire("connected");
+          updateEmptyCopy();
+        } catch (error) {
+          state.connecting = false;
+          state.agent = null;
+          updateConnectionUi();
+          setWire("error");
+          setActivity(["Could not connect. Allow the browser to open eport-runtime://, then try again."], true);
+          log("error", describeError(error), true);
+          ui.empty.hidden = false;
+          ui.empty.querySelector("strong").textContent = "The agent is not reachable.";
+          updateRunState();
+        }
+      }
+
+      function disconnect() {
+        if (!state.agent) {
+          return;
+        }
+
+        const agent = state.agent;
+        state.agent = null;
+        try {
+          agent.close();
+        } catch {
+        }
+        log("close", "connection closed by the page");
+        setWire("offline");
+        ui.connect.textContent = "Connect";
+        ui.connect.disabled = false;
+        updateRunState();
+        updateEmptyCopy();
+      }
+
+      function toggleConnection() {
+        if (state.agent) {
+          disconnect();
+        } else {
+          connect();
+        }
+      }
+
+      function bind() {
+        ui.endpoint.textContent = sdk.ENDPOINT;
+        ui.connectionEndpoint.value = sdk.ENDPOINT;
+        ui.protocol.textContent = sdk.SUBPROTOCOL;
+        buildOperationList();
+
+        for (const op of OP_ORDER) {
+          if (op !== state.selected) {
+            continue;
+          }
+          for (const button of ui.ops.querySelectorAll(".op")) {
+            button.setAttribute("aria-pressed", String(button.dataset.op === op));
+          }
+        }
+
+        ui.params.value = JSON.stringify(OPS[state.selected].example, null, 2);
+        ui.opBadge.textContent = state.selected;
+        validateParams();
+        updateInputBlock();
+
+        ui.params.addEventListener("input", validateParams);
+        ui.example.addEventListener("click", resetExample);
+        ui.connect.addEventListener("click", toggleConnection);
+        ui.run.addEventListener("click", runRequest);
+        ui.clearLog.addEventListener("click", clearLog);
+
+        document.querySelectorAll('input[name="input-mode"]').forEach((input) => {
+          input.addEventListener("change", () => {
+            state.inputMode = input.value;
+            updateInputVisibility();
+          });
+        });
+
+        ui.inputFile.addEventListener("change", () => {
+          state.file = ui.inputFile.files && ui.inputFile.files.length > 0
+            ? ui.inputFile.files[0]
+            : null;
+          ui.fileName.textContent = state.file
+            ? `${state.file.name} (${formatBytes(state.file.size)})`
+            : "No file chosen";
+        });
+
+        for (const area of [ui.params, ui.inputText]) {
+          area.addEventListener("keydown", (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              event.preventDefault();
+              if (!ui.run.disabled) {
+                runRequest();
+              }
+            }
+          });
+        }
+
+        ui.eventLog.addEventListener("toggle", () => {
+          if (ui.eventLog.open) {
+            const wrap = ui.logRows.parentElement.parentElement;
+            wrap.scrollTop = wrap.scrollHeight;
+          }
+        });
+
+        window.addEventListener("beforeunload", () => {
+          if (state.agent) {
+            state.agent.close();
+          }
+        });
+
+        setWire("offline");
+        setActivity(["offline"]);
+        updateConnectionUi();
+        updateEmptyCopy();
+      }
+
+      if (!sdk) {
+        setWire("error");
+        ui.connect.disabled = true;
+        ui.run.disabled = true;
+        ui.activity.classList.add("is-error");
+        setActivity(["The SDK bundle did not load. Download the release bundle again."], true);
+        ui.outputSummary.textContent = "sdk missing";
+        ui.empty.hidden = false;
+        ui.empty.querySelector("strong").textContent = "The SDK bundle did not load.";
+        ui.empty.lastChild.textContent = "\n            The SDK bundle is missing from this copy.";
+        log("error", "EportRuntime is not defined; the SDK bundle is missing", true);
+        ui.clearLog.addEventListener("click", clearLog);
+        return;
+      }
+
+      bind();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!--
+  Copyright (C) 2026 Jiaowei <wei.jiao@guanwu.com>
+  SPDX-License-Identifier: AGPL-3.0-only
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <OutputType Condition="'$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">WinExe</OutputType>
+    <OutputType Condition="'$(RuntimeIdentifier)' != '' and $(RuntimeIdentifier.StartsWith('win'))">WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>eport-runtime</AssemblyName>
+    <RootNamespace>EportRuntime</RootNamespace>
+    <Version>1.0.0</Version>
+    <Copyright>Copyright (C) 2026 Jiaowei &lt;wei.jiao@guanwu.com&gt;</Copyright>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <PublishAot>true</PublishAot>
+    <SelfContained>true</SelfContained>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <EportSkfVersion>1.0.0</EportSkfVersion>
+    <EportSkfLibrary Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64'">$(Pkgeportskf)/$(RuntimeIdentifier)/lib/eportskf_static.lib</EportSkfLibrary>
+    <EportSkfLibrary Condition="$(RuntimeIdentifier.StartsWith('linux'))">$(Pkgeportskf)/$(RuntimeIdentifier)/lib/libeportskf_static.a</EportSkfLibrary>
+  </PropertyGroup>
+
+  <!-- The engine is a static library from the eportskf package. Linking it into
+       the executable keeps a published agent to a single file. -->
+  <ItemGroup>
+    <PackageReference Include="eportskf" Version="$(EportSkfVersion)"
+                      GeneratePathProperty="true" />
+    <DirectPInvoke Include="eportskf" />
+    <NativeLibrary Include="$(EportSkfLibrary)" Condition="'$(EportSkfLibrary)' != ''" />
+    <LinkerArg Include="winscard.lib;hid.lib;setupapi.lib"
+               Condition="'$(RuntimeIdentifier)' == 'win-x64' or '$(RuntimeIdentifier)' == 'win-arm64'" />
+    <LinkerArg Include="-ldl" Condition="$(RuntimeIdentifier.StartsWith('linux'))" />
+  </ItemGroup>
+
+  <Target Name="CheckEportSkfLibrary" BeforeTargets="LinkNative">
+    <Error Condition="'$(EportSkfLibrary)' == '' or !Exists('$(EportSkfLibrary)')"
+           Text="the eportskf native library was not found; restore the eportskf package from GitHub Packages" />
+  </Target>
+
+</Project>

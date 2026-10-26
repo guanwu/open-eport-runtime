@@ -1,0 +1,121 @@
+# Copyright (C) 2026 Jiaowei <wei.jiao@guanwu.com>
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Builds, tests, and packages the agent for each supported platform on every
+# push and pull request, then adds the same archives to a published release.
+# The SDK bundles and document copies under docs/ are generated locally and
+# committed; GitHub Pages serves that directory from the default branch. The
+# eportskf native package is restored from GitHub Packages.
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: ${{ matrix.archive }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2022, rid: win-x64, archive: windows-x64, binary: eport-runtime.exe, vcvars: amd64 }
+          - { runner: windows-2022, rid: win-arm64, archive: windows-arm64, binary: eport-runtime.exe, vcvars: amd64_arm64 }
+          - { runner: ubuntu-22.04, rid: linux-x64, archive: linux-x64, binary: eport-runtime }
+          - { runner: ubuntu-22.04-arm, rid: linux-arm64, archive: linux-arm64, binary: eport-runtime }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Install the Native AOT prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev
+
+      - name: Authenticate the GitHub Packages source
+        run: dotnet nuget update source github-guanwu --configfile nuget.config --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - name: Publish the agent
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
+          call "%VSDIR%\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.vcvars }}
+          set IlcUseEnvironmentalTools=true
+          dotnet publish src/EportRuntime/EportRuntime.csproj -c Release -r ${{ matrix.rid }} -o stage
+
+      - name: Publish the agent
+        if: runner.os == 'Linux'
+        run: dotnet publish src/EportRuntime/EportRuntime.csproj -c Release -r ${{ matrix.rid }} -o stage
+
+      - name: Stage the bundle
+        shell: bash
+        run: |
+          mkdir -p stage/docs
+          cp -R docs/. stage/docs/
+          cp README.md LICENSE stage/
+
+      - name: Smoke test
+        if: matrix.rid != 'win-arm64'
+        shell: bash
+        run: node tests/smoke.mjs "stage/${{ matrix.binary }}"
+
+      - name: Archive the bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          base="eport-runtime-${{ matrix.archive }}"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            (cd stage && 7z a -tzip -bd "../dist/$base.zip" . > /dev/null)
+          else
+            tar -czf "dist/$base.tar.gz" -C stage .
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: eport-runtime-${{ matrix.archive }}
+          path: dist/*
+          if-no-files-found: error
+
+  attach:
+    name: attach the bundles to the release
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: eport-runtime-*
+          merge-multiple: true
+
+      - name: Upload the bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber

@@ -1,0 +1,6 @@
+{
+  "type": "module",
+  "sideEffects": false,
+  "author": "Jiaowei <wei.jiao@guanwu.com>",
+  "license": "AGPL-3.0-only"
+}
